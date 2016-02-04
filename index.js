@@ -22,10 +22,10 @@ function securityFactory( options ) {
       if( !data ){
         async.parallel([
               function( callback ){
-                validateGoogleToken( { url: config.security.google_token_info_url, access_token: access_token, req: req, callback: callback, type: 'google_token' } );
+                validateToken( { url: config.security.google_token_info_url, access_token: access_token, req: req, callback: callback, type: 'google_token' } );
               },
               function( callback ){
-                validateApigeeEdgeToken( { url: config.security.apigee_edge.url, access_token: access_token, req: req, callback: callback, type: 'apigee_edge_token' } );
+                validateToken( { url: config.security.apigee_edge.url, access_token: access_token, req: req, callback: callback, type: 'apigee_edge_token' } );
               },
             ],
             function( err, results ){
@@ -66,24 +66,12 @@ function securityFactory( options ) {
     return validationResult;
   }
 
-  function validateGoogleToken( options ){
+  function validateToken( options ){
     var url = options.url + options.access_token; // 'https://www.googleapis.com/oauth2/v3/tokeninfo?access_token='
     request.get( url , function( error, response, body ) {
       var _body = body ? JSON.parse( body ) : {};
       if( !error && response.statusCode === 200 ){  /*&& _.endsWith( _body.email, config.security.email_domain*/ /*'@apigee.com'*/
         //callback( null, { "valid": true, type: 'google_token' } );
-        getUserAccounts( { access_token: options.access_token, email: _body.email, req: options.req, callback: options.callback, type: options.type } );
-      } else{
-        options.callback( null, { "valid": false, type: options.type } );
-      }
-    });
-  }
-
-  function validateApigeeEdgeToken( options ){
-    var url = options.url + options.access_token;
-    request.get( url , function( error, response, body ) {
-      var _body = body ? JSON.parse( body ) : {};
-      if( !error && response.statusCode === 200 ){
         getUserAccounts( { access_token: options.access_token, email: _body.email, req: options.req, callback: options.callback, type: options.type } );
       } else{
         options.callback( null, { "valid": false, type: options.type } );
@@ -115,7 +103,6 @@ function securityFactory( options ) {
       message_back = "ok";
     }
     var t = { "access_token": options.access_token, type: "apigee_edge_token", 'account_list': options.account_list, "email": options.email, "valid": valid, "message_back": message_back };
-    //debug( t );
     options.callback( null, t );
   }
 
@@ -128,3 +115,16 @@ function securityFactory( options ) {
 }
 
 module.exports = securityFactory;
+
+
+/*  function validateApigeeEdgeToken( options ){
+ var url = options.url + options.access_token;
+ request.get( url , function( error, response, body ) {
+ var _body = body ? JSON.parse( body ) : {};
+ if( !error && response.statusCode === 200 ){
+ getUserAccounts( { access_token: options.access_token, email: _body.email, req: options.req, callback: options.callback, type: options.type } );
+ } else{
+ options.callback( null, { "valid": false, type: options.type } );
+ }
+ });
+ }*/
