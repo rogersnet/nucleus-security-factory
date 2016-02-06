@@ -115,16 +115,3 @@ function securityFactory( options ) {
 }
 
 module.exports = securityFactory;
-
-
-/*  function validateApigeeEdgeToken( options ){
- var url = options.url + options.access_token;
- request.get( url , function( error, response, body ) {
- var _body = body ? JSON.parse( body ) : {};
- if( !error && response.statusCode === 200 ){
- getUserAccounts( { access_token: options.access_token, email: _body.email, req: options.req, callback: options.callback, type: options.type } );
- } else{
- options.callback( null, { "valid": false, type: options.type } );
- }
- });
- }*/
