@@ -6,6 +6,7 @@ var cache = apigee.getCache();
 var async = require('async');
 var _ = require('lodash');
 var debug = require('debug')('securityFactory');
+var jwt = require('jsonwebtoken');
 
 function securityFactory( options ) {
   var config = options.config;
@@ -20,26 +21,8 @@ function securityFactory( options ) {
     }
     cache.get( access_token, function( error, data ){
       if( !data ){
-        async.parallel([
-              function( callback ){
-                validateToken( { url: config.security.google_token_info_url, access_token: access_token, req: req, callback: callback, type: 'google_token' } );
-              },
-              function( callback ){
-                validateToken( { url: config.security.apigee_edge.url, access_token: access_token, req: req, callback: callback, type: 'apigee_edge_token' } );
-              },
-            ],
-            function( err, results ){
-              debug("not in cache", results );
-              var validationResult = hasAtLeastOneValidToken( results );
-              debug("not in cache", validationResult );
-              if( validationResult.valid ) {  // token is valid
-                next();
-              } else {                          // token is invalid
-                res.status('401').json( { code: 401, message: messages.SEC_INVALID_ACCESS_TOKEN, "more": validationResult.message_back } );
-              }
-              debug("not in cache", validationResult );
-              cache.put( access_token, JSON.stringify( validationResult ), 3600 );
-            });
+        debug('when entry not found in cache', data);
+        validateTokenAsync( { config: config, access_token: access_token, req: req, res: res, next: next, messages: messages } );
       } else{
         var _cachedEntry = JSON.parse( data );
         debug( _cachedEntry );
@@ -51,7 +34,34 @@ function securityFactory( options ) {
         }
       }
     } )
-  };
+  }
+
+  function validateTokenAsync( options ) {
+    var config = options.config, access_token = options.access_token, messages = options.messages, req = options.req, res = options.res;
+    async.parallel([
+          function( callback ){
+            validateToken( { url: config.security.google_token_info_url, access_token: access_token, req: req, callback: callback, type: 'google_token' } );
+          },
+          function( callback ){
+            validateToken( { url: config.security.apigee_edge.url, access_token: access_token, req: req, callback: callback, type: 'apigee_edge_token' } );
+          },
+          function( callback ){
+            validateJWTToken( { access_token: access_token, token_key_url: config.security.apigee_sso2.token_key_url, req: options.req }, callback );
+          }
+        ],
+        function( err, results ){
+          debug("not in cache", results );
+          var validationResult = hasAtLeastOneValidToken( results );
+          debug("not in cache", validationResult );
+          if( validationResult.valid ) {  // token is valid
+            options.next();
+          } else {                          // token is invalid
+            res.status('401').json( { code: 401, message: messages.SEC_INVALID_ACCESS_TOKEN, "more": validationResult.message_back } );
+          }
+          debug("not in cache", validationResult );
+          cache.put( access_token, JSON.stringify( validationResult ), 3600 );
+        });
+  }
 
   function hasAtLeastOneValidToken( tokenValidations ){
     var validationResult = { valid: false };
@@ -111,6 +121,42 @@ function securityFactory( options ) {
     req.security.account_list = account_list;
   }
 
+
+  /*
+  * validateJWTToken - first search for the token in cache, if it exists, do not bother verifying it with publicKey. Instead, check if valid flag is true
+  *
+  * */
+  function validateJWTToken( options, callback ) {
+    cache.get( 'sso2TokenKey', function( error, sso2TokenKey ){
+      if( !sso2TokenKey ) {
+        request( options.token_key_url, function( error, response, sso2TokenKeyBody ) {
+          if( !error ) {
+            cache.put( 'sso2TokenKey', sso2TokenKeyBody, 36000 ); //retrieve key every 10 hrs
+            debug('publicKey_before', sso2TokenKeyBody);
+            verifyJWT( { access_token: options.access_token, req: options.req, res: options.res, public_key: JSON.parse(sso2TokenKeyBody).value }, callback );
+          } else{
+            callback( null, { valid: false, "message_back": "Error retrieving tokenKey" } );
+          }
+        });
+      } else {
+          verifyJWT( { access_token: options.access_token, req: options.req, res: options.res, public_key: JSON.parse(sso2TokenKey).value }, callback );
+      }
+    });
+  }
+
+  function verifyJWT( options, callback ) {
+    debug('publicKey', options.public_key);
+    jwt.verify( options.access_token, options.public_key, { algorithms: ['RS256'] }, function(err, decoded) {
+      debug('verifyJWT', err, decoded);
+      if( !err ) {
+        getUserAccounts( { access_token: options.access_token, email: decoded.email || decoded.cid, req: options.req, callback: callback, type: options.type } );
+      } else {
+        callback( null, { valid: false, "message_back": "Error decoding JWT" } );
+      }
+    });
+  }
+
+  //
   return applySecurity;
 }
 
