@@ -46,8 +46,11 @@ function securityFactory( options ) {
             validateToken( { url: config.security.apigee_edge.url, access_token: access_token, req: req, callback: callback, type: 'apigee_edge_token' } );
           },
           function( callback ){
-            validateJWTToken( { access_token: access_token, token_key_url: config.security.apigee_sso2.token_key_url, req: options.req }, callback );
-          }
+            validateJWTToken( { access_token: access_token, token_key_url: config.security.apigee_sso2.token_key_url, req: options.req, type: 'apigee_sso22_jwt' }, callback );
+          },
+          function verifyAuth0JWT( callback ){
+            validateAuth0JWTToken( { access_token: access_token, client_secret: config.security.auth0_jwt.client_secret, req: options.req, type: 'auth0_jwt' }, callback );
+          },
         ],
         function( err, results ){
           debug("not in cache", results );
@@ -66,7 +69,7 @@ function securityFactory( options ) {
   function hasAtLeastOneValidToken( tokenValidations ){
     var validationResult = { valid: false };
     tokenValidations.forEach( function( _validationResult ) {
-        if( _validationResult.valid == true ){
+        if( (_validationResult.valid) == true ){
           validationResult = _validationResult;
         } else if ( _validationResult.email ){
           validationResult = _validationResult;
@@ -121,6 +124,23 @@ function securityFactory( options ) {
     req.security.account_list = account_list;
   }
 
+
+  /*
+  * validateAuth0JWTToken
+  *
+  */
+  function validateAuth0JWTToken( options, callback ) {
+    jwt.verify(options.access_token, new Buffer(options.client_secret, 'base64'), function(err, decoded) {
+      if( err ) {
+        debug('not a valid Auth0 JWT');
+        callback(null, { valid: false, "message_back": "Invalid Auth0 JWT" });
+      } else {
+        debug('valid Auth0 JWT')
+        getUserAccounts( { access_token: options.access_token, email: decoded.email, req: options.req, callback: callback, type: options.type } );
+        //callback(null, { valid: false, "message_back": "Invalid Auth0 JWT" });
+      }
+    });
+  }
 
   /*
   * validateJWTToken - first search for the token in cache, if it exists, do not bother verifying it with publicKey. Instead, check if valid flag is true
