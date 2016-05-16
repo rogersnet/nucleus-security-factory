@@ -81,7 +81,9 @@ function securityFactory( options ) {
 
   function validateToken( options ){
     var url = options.url + options.access_token; // 'https://www.googleapis.com/oauth2/v3/tokeninfo?access_token='
-    request.get( url , function( error, response, body ) {
+    debug('validating token with url:', url);
+    request.get( {url: url, rejectUnauthorized: false} , function( error, response, body ) {
+      debug('response after validating token:', error, JSON.stringify(body));
       var _body = body ? JSON.parse( body ) : {};
       if( !error && response.statusCode === 200 ){  /*&& _.endsWith( _body.email, config.security.email_domain*/ /*'@apigee.com'*/
         //callback( null, { "valid": true, type: 'google_token' } );
@@ -149,7 +151,7 @@ function securityFactory( options ) {
   function validateJWTToken( options, callback ) {
     cache.get( 'sso2TokenKey', function( error, sso2TokenKey ){
       if( !sso2TokenKey ) {
-        request( options.token_key_url, function( error, response, sso2TokenKeyBody ) {
+        request( {url: options.token_key_url, rejectUnauthorized: false}, function( error, response, sso2TokenKeyBody ) {
           if( !error ) {
             cache.put( 'sso2TokenKey', sso2TokenKeyBody, 36000 ); //retrieve key every 10 hrs
             debug('publicKey_before', sso2TokenKeyBody);
