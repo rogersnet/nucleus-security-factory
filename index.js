@@ -1,12 +1,13 @@
 'use strict';
 
-var apigee = require('apigee-access');
-var request = require('request');
-var cache = apigee.getCache();
-var async = require('async');
-var _ = require('lodash');
-var debug = require('debug')('securityFactory');
-var jwt = require('jsonwebtoken');
+var apigee = require('apigee-access'),
+    request = require('request'),
+    cache = apigee.getCache(),
+    async = require('async'),
+    _ = require('lodash'),
+    debug = require('debug')('securityFactory'),
+    jwt = require('jsonwebtoken'),
+    urljoin = require('url-join');
 
 function securityFactory( options ) {
   var config = options.config;
@@ -44,6 +45,9 @@ function securityFactory( options ) {
           },
           function( callback ){
             validateToken( { url: config.security.apigee_edge.url, access_token: access_token, req: req, callback: callback, type: 'apigee_edge_token' } );
+          },
+          function( callback ){
+            validateApigeeAccountToken( { url: urljoin(config.security.apigee_accounts.url, req.query.uuid + '.json?access_token='), access_token: access_token, req: req, callback: callback, type: 'apigee_accounts_token' } );
           },
           function( callback ){
             validateJWTToken( { access_token: access_token, token_key_url: config.security.apigee_sso2.token_key_url, req: options.req, type: 'apigee_sso22_jwt' }, callback );
@@ -85,9 +89,26 @@ function securityFactory( options ) {
     request.get( {url: url, rejectUnauthorized: false} , function( error, response, body ) {
       debug('response after validating token:', error, JSON.stringify(body));
       var _body = body ? JSON.parse( body ) : {};
-      if( !error && response.statusCode === 200 ){  /*&& _.endsWith( _body.email, config.security.email_domain*/ /*'@apigee.com'*/
-        //callback( null, { "valid": true, type: 'google_token' } );
+
+      //_body.email = 'akshay.anand9@t-mobile.com';
+      if( !error && response.statusCode === 200 ){
         getUserAccounts( { access_token: options.access_token, email: _body.email, req: options.req, callback: options.callback, type: options.type } );
+      } else{
+        options.callback( null, { "valid": false, type: options.type } );
+      }
+    });
+  }
+
+  function validateApigeeAccountToken( options ){
+    var url = options.url + options.access_token; // 'https://www.googleapis.com/oauth2/v3/tokeninfo?access_token='
+    debug('validating token with url:', url);
+    request.get( {url: url, rejectUnauthorized: false} , function( error, response, body ) {
+      debug('response after validating token:', error, JSON.stringify(body));
+      var _body = body ? JSON.parse(body) : {};
+
+      //_body.data.email = 'akshay.anand9@t-mobile.com';
+      if( !error && response.statusCode === 200 ){
+        getUserAccounts( { access_token: options.access_token, email: _body.data.email, req: options.req, callback: options.callback, type: options.type } );
       } else{
         options.callback( null, { "valid": false, type: options.type } );
       }
@@ -145,10 +166,16 @@ function securityFactory( options ) {
   }
 
   /*
+   * validate accounts.apigee.com token e.g.
+   * curl https://accounts.apigee.com/api/v1/users/{uuid}.json?access_token={access_token}
+   */
+
+
+  /*
   * validateJWTToken - first search for the token in cache, if it exists, do not bother verifying it with publicKey. Instead, check if valid flag is true
   *
   * */
-  function validateJWTToken( options, callback ) {
+  function validateJWTToken(options, callback) {
     cache.get( 'sso2TokenKey', function( error, sso2TokenKey ){
       if( !sso2TokenKey ) {
         request( {url: options.token_key_url, rejectUnauthorized: false}, function( error, response, sso2TokenKeyBody ) {
