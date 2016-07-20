@@ -14,13 +14,20 @@ function securityFactory( options ) {
   var messages = options.messages;
   var models = options.models;
   function applySecurity(req, res, next) {
-    var access_token;
-    if( req.header('Authorization') ) {
+
+    var access_token = req.get('Authorization');
+/*    if( req.header('Authorization') ) {
       access_token = req.header('Authorization').split(/\s+/).pop();
     } else{
       access_token = req.query.access_token || '';
     }
-    cache.get( access_token, function( error, data ){
+*/        //Authorization should begin with "Bearer"
+    if (access_token && access_token.length > 7) {
+      access_token = access_token.substring(7);
+    }
+    debug('access_token here:', access_token);
+
+    cache.get(access_token, function( error, data){
       if( !data ){
         debug('when entry not found in cache', data);
         validateTokenAsync( { config: config, access_token: access_token, req: req, res: res, next: next, messages: messages } );
@@ -41,6 +48,9 @@ function securityFactory( options ) {
     var config = options.config, access_token = options.access_token, messages = options.messages, req = options.req, res = options.res;
     async.parallel([
           function( callback ){
+            validateJWTToken( { access_token: access_token, token_key_url: config.security.apigee_sso2.token_key_url, req: options.req, type: 'apigee_sso22_jwt' }, callback );
+          },
+          function( callback ){
             validateToken( { url: config.security.google_token_info_url, access_token: access_token, req: req, callback: callback, type: 'google_token' } );
           },
           function( callback ){
@@ -48,9 +58,6 @@ function securityFactory( options ) {
           },
           function( callback ){
             validateApigeeAccountToken( { url: urljoin(config.security.apigee_accounts.url, req.query.uuid + '.json?access_token='), access_token: access_token, req: req, callback: callback, type: 'apigee_accounts_token' } );
-          },
-          function( callback ){
-            validateJWTToken( { access_token: access_token, token_key_url: config.security.apigee_sso2.token_key_url, req: options.req, type: 'apigee_sso22_jwt' }, callback );
           },
           function verifyAuth0JWT( callback ){
             validateAuth0JWTToken( { access_token: access_token, client_secret: config.security.auth0_jwt.client_secret, req: options.req, type: 'auth0_jwt' }, callback );
@@ -165,25 +172,21 @@ function securityFactory( options ) {
     });
   }
 
-  /*
-   * validate accounts.apigee.com token e.g.
-   * curl https://accounts.apigee.com/api/v1/users/{uuid}.json?access_token={access_token}
-   */
-
 
   /*
   * validateJWTToken - first search for the token in cache, if it exists, do not bother verifying it with publicKey. Instead, check if valid flag is true
   *
   * */
   function validateJWTToken(options, callback) {
-    cache.get( 'sso2TokenKey', function( error, sso2TokenKey ){
-      if( !sso2TokenKey ) {
+    cache.get( 'sso2TokenKey', function(error, sso2TokenKey){
+      //sso2TokenKey = undefined;
+      if(!sso2TokenKey) {
         request( {url: options.token_key_url, rejectUnauthorized: false}, function( error, response, sso2TokenKeyBody ) {
-          if( !error ) {
+          if(!error) {
             cache.put( 'sso2TokenKey', sso2TokenKeyBody, 36000 ); //retrieve key every 10 hrs
             debug('publicKey_before', sso2TokenKeyBody);
-            verifyJWT( { access_token: options.access_token, req: options.req, res: options.res, public_key: JSON.parse(sso2TokenKeyBody).value }, callback );
-          } else{
+            verifyJWT({ access_token: options.access_token, req: options.req, res: options.res, public_key: JSON.parse(sso2TokenKeyBody).value }, callback);
+          } else {
             callback( null, { valid: false, "message_back": "Error retrieving tokenKey" } );
           }
         });
@@ -193,11 +196,13 @@ function securityFactory( options ) {
     });
   }
 
-  function verifyJWT( options, callback ) {
+  function verifyJWT(options, callback) {
     debug('publicKey', options.public_key);
+    debug('validating access token', options.access_token);
+    debug('validating access token length', options.access_token.length);
     jwt.verify( options.access_token, options.public_key, { algorithms: ['RS256'] }, function(err, decoded) {
       debug('verifyJWT', err, decoded);
-      if( !err ) {
+      if(!err) {
         getUserAccounts( { access_token: options.access_token, email: decoded.email || decoded.cid, req: options.req, callback: callback, type: options.type } );
       } else {
         callback( null, { valid: false, "message_back": "Error decoding JWT" } );
