@@ -14,49 +14,42 @@ function securityFactory( options ) {
   var messages = options.messages;
   var models = options.models;
   function applySecurity(req, res, next) {
-
     var access_token = req.get('Authorization');
-/*    if( req.header('Authorization') ) {
-      access_token = req.header('Authorization').split(/\s+/).pop();
-    } else{
-      access_token = req.query.access_token || '';
-    }
-*/        //Authorization should begin with "Bearer"
-  if (access_token && access_token.length > 7) {
-    access_token = access_token.substring(7);
-    debug('access_token here:', access_token);
-    cache.get(access_token, function(error, data) {
-      if (!data) {
-        debug('when entry not found in cache', data);
-        validateTokenAsync({
-          config: config,
-          access_token: access_token,
-          req: req,
-          res: res,
-          next: next,
-          messages: messages
-        });
-      } else {
-        var _cachedEntry = JSON.parse(data);
-        debug(_cachedEntry);
-        if (_cachedEntry.valid) {
-          setRequestSecurity(req, _cachedEntry.account_list);
-          next();
-        } else {
-          res.status('401').json({
-            code: 401,
-            message: messages.SEC_INVALID_ACCESS_TOKEN,
-            "more": _cachedEntry.message_back
+    if (access_token && access_token.length > 7) {
+      access_token = access_token.substring(7);
+      debug('access_token here:', access_token);
+      cache.get(access_token, function(error, data) {
+        if (!data) {
+          debug('when entry not found in cache', data);
+          validateTokenAsync({
+            config: config,
+            access_token: access_token,
+            req: req,
+            res: res,
+            next: next,
+            messages: messages
           });
+        } else {
+          var _cachedEntry = JSON.parse(data);
+          debug(_cachedEntry);
+          if (_cachedEntry.valid) {
+            setRequestSecurity(req, _cachedEntry.account_list);
+            next();
+          } else {
+            res.status('401').json({
+              code: 401,
+              message: messages.SEC_INVALID_ACCESS_TOKEN,
+              "more": _cachedEntry.message_back
+            });
+          }
         }
-      }
-    });
-  } else {
-    res.status('401').json({
-      code: 401,
-      message: messages.SEC_INVALID_ACCESS_TOKEN
-    });
-  }
+      });
+    } else {
+      res.status('401').json({
+        code: 401,
+        message: messages.SEC_INVALID_ACCESS_TOKEN
+      });
+    }
   }
   function validateTokenAsync( options ) {
     var config = options.config, access_token = options.access_token, messages = options.messages, req = options.req, res = options.res;
