@@ -9,7 +9,7 @@ var apigee = require('apigee-access'),
     jwt = require('jsonwebtoken'),
     urljoin = require('url-join');
 
-function securityFactory( options ) {
+function securityFactory(options) {
   var config = options.config;
   var messages = options.messages;
   var models = options.models;
@@ -17,7 +17,7 @@ function securityFactory( options ) {
     var access_token = req.get('Authorization');
     if (access_token && access_token.length > 7) {
       access_token = access_token.substring(7);
-      debug('access_token here:', access_token);
+      res.locals.jwt = jwt.decode(access_token);
       cache.get(access_token, function(error, data) {
         if (!data) {
           debug('when entry not found in cache', data);
@@ -51,7 +51,7 @@ function securityFactory( options ) {
       });
     }
   }
-  function validateTokenAsync( options ) {
+  function validateTokenAsync(options) {
     var config = options.config, access_token = options.access_token, messages = options.messages, req = options.req, res = options.res;
     async.parallel([
           function( callback ){
@@ -63,16 +63,16 @@ function securityFactory( options ) {
           function( callback ){
             validateToken( { url: config.security.apigee_edge.url, access_token: access_token, req: req, callback: callback, type: 'apigee_edge_token' } );
           },
-          function( callback ){
+/*          function( callback ){
             validateApigeeAccountToken( { url: urljoin(config.security.apigee_accounts.url, req.query.uuid + '.json?access_token='), access_token: access_token, req: req, callback: callback, type: 'apigee_accounts_token' } );
-          },
+          },*/
           function verifyAuth0JWT( callback ){
             validateAuth0JWTToken( { access_token: access_token, client_secret: config.security.auth0_jwt.client_secret, req: options.req, type: 'auth0_jwt' }, callback );
           },
         ],
         function( err, results ){
           debug("not in cache", results );
-          var validationResult = hasAtLeastOneValidToken( results );
+          var validationResult = hasAtLeastOneValidToken(results);
           debug("not in cache", validationResult );
           if( validationResult.valid ) {  // token is valid
             options.next();
@@ -87,9 +87,10 @@ function securityFactory( options ) {
   function hasAtLeastOneValidToken( tokenValidations ){
     var validationResult = { valid: false };
     tokenValidations.forEach( function( _validationResult ) {
-        if( (_validationResult.valid) == true ){
+      debug("getting validation result", _validationResult);
+        if((_validationResult.valid) == true){
           validationResult = _validationResult;
-        } else if ( _validationResult.email ){
+        } else if (_validationResult.email){
           validationResult = _validationResult;
         }
       } );
@@ -97,12 +98,17 @@ function securityFactory( options ) {
     return validationResult;
   }
 
-  function validateToken( options ){
+  function validateToken(options){
     var url = options.url + options.access_token; // 'https://www.googleapis.com/oauth2/v3/tokeninfo?access_token='
     debug('validating token with url:', url);
     request.get( {url: url, rejectUnauthorized: false} , function( error, response, body ) {
       debug('response after validating token:', error, JSON.stringify(body));
-      var _body = body ? JSON.parse( body ) : {};
+      var _body = {};//body ? JSON.parse( body ) : {};
+      try {
+        _body = body ? JSON.parse( body ) : {};
+      } catch(err) {
+        debug(err);
+      }
 
       //_body.email = 'akshay.anand9@t-mobile.com';
       if( !error && response.statusCode === 200 ){
@@ -113,7 +119,7 @@ function securityFactory( options ) {
     });
   }
 
-  function validateApigeeAccountToken( options ){
+  function validateApigeeAccountToken(options){
     var url = options.url + options.access_token; // 'https://www.googleapis.com/oauth2/v3/tokeninfo?access_token='
     debug('validating token with url:', url);
     request.get( {url: url, rejectUnauthorized: false} , function( error, response, body ) {
@@ -129,7 +135,8 @@ function securityFactory( options ) {
     });
   }
 
-  function getUserAccounts( options ){
+  function getUserAccounts(options){
+    debug('running getUserAccounts');
     var account_list = [];
     if( _.endsWith( options.email, config.security.email_domain ) ){
       account_list.push( '*' );
@@ -145,8 +152,8 @@ function securityFactory( options ) {
     }
   }
 
-  function callCallback( options ){
-    setRequestSecurity( options.req, options.account_list )
+  function callCallback(options){
+    setRequestSecurity(options.req, options.account_list)
     var valid = false, message_back = "No accounts associated to credentials";
     if( options.account_list.length > 0 ) {
       valid = true;
@@ -156,7 +163,7 @@ function securityFactory( options ) {
     options.callback( null, t );
   }
 
-  function setRequestSecurity( req, account_list ) {
+  function setRequestSecurity(req, account_list) {
     req.security = {};
     req.security.account_list = account_list;
   }
@@ -166,11 +173,11 @@ function securityFactory( options ) {
   * validateAuth0JWTToken
   *
   */
-  function validateAuth0JWTToken( options, callback ) {
+  function validateAuth0JWTToken(options, callback) {
     jwt.verify(options.access_token, new Buffer(options.client_secret, 'base64'), function(err, decoded) {
-      if( err ) {
+      if(err) {
         debug('not a valid Auth0 JWT');
-        callback(null, { valid: false, "message_back": "Invalid Auth0 JWT" });
+        callback(null, { valid: false, "message_back": err });
       } else {
         debug('valid Auth0 JWT')
         getUserAccounts( { access_token: options.access_token, email: decoded.email, req: options.req, callback: callback, type: options.type } );
@@ -185,11 +192,15 @@ function securityFactory( options ) {
   *
   * */
   function validateJWTToken(options, callback) {
-    cache.get( 'sso2TokenKey', function(error, sso2TokenKey){
+/* debug('write cookie', options.req.headers.cookie);
+   var cookies = cookie.parse(options.req.headers.cookie || '');
+    debug('parsed cookies', cookies);
+*/
+      cache.get( 'sso2TokenKey', function(error, sso2TokenKey){
       //sso2TokenKey = undefined;
-      if(!sso2TokenKey) {
+      if (!sso2TokenKey) {
         request( {url: options.token_key_url, rejectUnauthorized: false}, function( error, response, sso2TokenKeyBody ) {
-          if(!error) {
+          if (!error) {
             cache.put( 'sso2TokenKey', sso2TokenKeyBody, 36000 ); //retrieve key every 10 hrs
             debug('publicKey_before', sso2TokenKeyBody);
             verifyJWT({ access_token: options.access_token, req: options.req, res: options.res, public_key: JSON.parse(sso2TokenKeyBody).value }, callback);
@@ -207,17 +218,16 @@ function securityFactory( options ) {
     debug('publicKey', options.public_key);
     debug('validating access token', options.access_token);
     debug('validating access token length', options.access_token.length);
-    jwt.verify( options.access_token, options.public_key, { algorithms: ['RS256'] }, function(err, decoded) {
-      debug('verifyJWT', err, decoded);
+    jwt.verify(options.access_token, options.public_key, { algorithms: ['RS256'] }, function(err, decoded) {
+      debug('verifyJWT response', err, decoded);
       if(!err) {
         getUserAccounts( { access_token: options.access_token, email: decoded.email || decoded.cid, req: options.req, callback: callback, type: options.type } );
       } else {
-        callback( null, { valid: false, "message_back": "Error decoding JWT" } );
+        debug('error triggered from verifyJWT');
+        callback( null, { valid: false, "message_back": err } );
       }
     });
   }
-
-  //
   return applySecurity;
 }
 
