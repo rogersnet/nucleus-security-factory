@@ -138,6 +138,7 @@ function securityFactory(options) {
   function getUserAccounts(options){
     debug('running getUserAccounts');
     var account_list = [];
+    options.email = options.email.toLowerCase();
     if( _.endsWith( options.email, config.security.email_domain ) ){
       account_list.push( '*' );
       callCallback( { access_token: options.access_token, email: options.email, req: options.req, account_list: account_list, callback: options.callback, type: options.type } );
