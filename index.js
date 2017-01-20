@@ -139,7 +139,7 @@ function securityFactory(options) {
     debug('running getUserAccounts');
     var account_list = [];
     options.email = options.email.toLowerCase();
-    if( _.endsWith( options.email, config.security.email_domain ) ){
+    if( endsWithAllAccess(options.email, config.security.email_domain) ){
       account_list.push( '*' );
       callCallback( { access_token: options.access_token, email: options.email, req: options.req, account_list: account_list, callback: options.callback, type: options.type } );
     } else{
@@ -151,6 +151,14 @@ function securityFactory(options) {
           callCallback( { access_token: options.access_token, email: options.email, req: options.req, account_list: account_list, callback: options.callback, type: options.type } );
         } );
     }
+  }
+
+  function endsWithAllAccess(email, email_domains) {
+    debug('email, email_domains', email, email_domains);
+    return email_domains.some(function(domain) {
+      return _.endsWith( email, domain );
+    });
+    //return false;
   }
 
   function callCallback(options){
