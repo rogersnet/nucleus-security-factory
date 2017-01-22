@@ -67,7 +67,7 @@ function securityFactory(options) {
             validateApigeeAccountToken( { url: urljoin(config.security.apigee_accounts.url, req.query.uuid + '.json?access_token='), access_token: access_token, req: req, callback: callback, type: 'apigee_accounts_token' } );
           },*/
           function verifyAuth0JWT( callback ){
-            validateAuth0JWTToken( { access_token: access_token, client_secret: config.security.auth0_jwt.client_secret, req: options.req, type: 'auth0_jwt' }, callback );
+            validateAuth0JWTToken( { access_token: access_token, client_secret: config.security.auth0_jwt.client_secret, client_id: config.security.auth0_jwt.client_id,req: options.req, type: 'auth0_jwt' }, callback );
           },
         ],
         function( err, results ){
@@ -184,13 +184,16 @@ function securityFactory(options) {
   */
   function validateAuth0JWTToken(options, callback) {
     jwt.verify(options.access_token, new Buffer(options.client_secret, 'base64'), function(err, decoded) {
-      if(err) {
+      if (err) {
         debug('not a valid Auth0 JWT');
         callback(null, { valid: false, "message_back": err });
       } else {
-        debug('valid Auth0 JWT')
+        debug('valid Auth0 JWTT');
+        debug('jwt_decoded', decoded);
+        if (options.client_id != decoded.clientID) {
+          return callback(null, { valid: false, "message_back": "client_id does not match OAuth App" });
+        }
         getUserAccounts( { access_token: options.access_token, email: decoded.email, req: options.req, callback: callback, type: options.type } );
-        //callback(null, { valid: false, "message_back": "Invalid Auth0 JWT" });
       }
     });
   }
