@@ -184,13 +184,13 @@ function securityFactory(options) {
   */
   function validateAuth0JWTToken(options, callback) {
     jwt.verify(options.access_token, new Buffer(options.client_secret, 'base64'), function(err, decoded) {
-      var client_id = decoded.client_id !== undefined ? decoded.client_id : decoded.aud;
+      debug('jwt_decoded', decoded);
       if (err) {
         debug('not a valid Auth0 JWT');
         callback(null, { valid: false, "message_back": err });
       } else {
+        var client_id = decoded.client_id !== undefined ? decoded.client_id : decoded.aud;
         debug('valid Auth0 JWTT');
-        debug('jwt_decoded', decoded);
         if (options.client_id != client_id) {
           return callback(null, { valid: false, "message_back": "client_id does not match OAuth App" });
         }
