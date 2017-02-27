@@ -20,7 +20,7 @@ function securityFactory(options) {
     var access_token = req.get('Authorization');
     if (access_token && access_token.length > 7) {
       access_token = access_token.substring(7);
-      res.locals.jwt = jwt.decode(access_token);
+      //res.locals.jwt = jwt.decode(access_token);
       cache.get(access_token, function (error, data) {
         if (!data) {
           debug('when entry not found in cache', data);
@@ -35,6 +35,7 @@ function securityFactory(options) {
         } else {
           var _cachedEntry = JSON.parse(data);
           debug(_cachedEntry);
+          res.locals.jwt = _cachedEntry;
           if (_cachedEntry.valid) {
             utils.setRequestSecurity(req, _cachedEntry.account_list);
             next();
@@ -60,22 +61,22 @@ function securityFactory(options) {
     debug('SalesForceOAuthValidator', SalesForceOAuthValidator);
     async.parallel([
       function (callback) {
-        verifySSO2JWTToken({ access_token: access_token, token_key_url: config.security.apigee_sso2.token_key_url, req: options.req, whitelisted_domains: config.security.email_domain,
+        verifySSO2JWTToken({ access_token: access_token, token_key_url: config.security.apigee_sso2.token_key_url, req: options.req, res: options.res, whitelisted_domains: config.security.email_domain,
           type: 'apigee_sso22_jwt' }, callback);
       },
       function (callback) {
-        validateToken({ url: config.security.google_token_info_url, access_token: access_token, req: req, callback: callback, whitelisted_domains: config.security.email_domain, type: 'google_token' });
+        validateToken({ url: config.security.google_token_info_url, access_token: access_token, req: req, res: options.res, callback: callback, whitelisted_domains: config.security.email_domain, type: 'google_token' });
       },
       function (callback) {
-        validateToken({ url: config.security.apigee_edge.url, access_token: access_token, req: req, callback: callback, whitelisted_domains: config.security.email_domain, type: 'apigee_edge_token' });
+        validateToken({ url: config.security.apigee_edge.url, access_token: access_token, req: req, res: options.res, callback: callback, whitelisted_domains: config.security.email_domain, type: 'apigee_edge_token' });
       },
       function verifyAuth0JWT(callback) {
         validateAuth0JWTToken({ access_token: access_token, client_secret: config.security.auth0_jwt.client_secret, client_id: config.security.auth0_jwt.client_id, 
-          req: options.req, whitelisted_domains: config.security.email_domain, type: 'auth0_jwt' }, callback);
+          req: options.req, res: options.res, whitelisted_domains: config.security.email_domain, type: 'auth0_jwt' }, callback);
       },
       function verifySalesForceToken(callback) {
         debug('validating SalesForce Token');
-        salesForceOAuthValidator.validateSalesForceJWTToken({ access_token: access_token, token_key_url: config.security.salesforce_oauth.keys_url, req: options.req, type: 'salesforce_jwt' }, callback);
+        salesForceOAuthValidator.validateSalesForceJWTToken({ access_token: access_token, token_key_url: config.security.salesforce_oauth.keys_url, req: options.req, res: options.res, type: 'salesforce_jwt' }, callback);
       },
     ],
       function (err, results) {
@@ -111,14 +112,15 @@ function securityFactory(options) {
     debug('validating token with url:', url);
     request.get({ url: url, rejectUnauthorized: false }, function (error, response, body) {
       debug('response after validating token:', error, JSON.stringify(body));
-      var _body = {};//body ? JSON.parse( body ) : {};
-      try {
-        _body = body ? JSON.parse(body) : {};
-      } catch (err) {
-        debug(err);
-      }
 
       if (!error && response.statusCode === 200) {
+        var _body = {};
+        try {
+          _body = body ? JSON.parse(body) : {};
+          options.res.locals.jwt = _body;
+        } catch(err) {
+          debug(err);
+        }
         debug('checking options', options);
         utils.getUserAccounts({ access_token: options.access_token, email: _body.email, req: options.req, callback: options.callback, whitelisted_domains: options.whitelisted_domains, type: options.type });
       } else {
