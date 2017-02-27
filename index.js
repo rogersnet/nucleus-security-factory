@@ -20,7 +20,6 @@ function securityFactory(options) {
     var access_token = req.get('Authorization');
     if (access_token && access_token.length > 7) {
       access_token = access_token.substring(7);
-      //res.locals.jwt = jwt.decode(access_token);
       cache.get(access_token, function (error, data) {
         if (!data) {
           debug('when entry not found in cache', data);
@@ -141,10 +140,11 @@ function securityFactory(options) {
         callback(null, { valid: false, "message_back": err });
       } else {
         var client_id = decoded.client_id !== undefined ? decoded.client_id : decoded.aud;
-        debug('valid Auth0 JWTT');
+        debug('valid Auth0 JWT', decoded);
         if (options.client_id != client_id) {
           return callback(null, { valid: false, "message_back": "client_id does not match OAuth App" });
         }
+        options.res.locals.jwt = decoded;
         utils.getUserAccounts({ access_token: options.access_token, email: decoded.email, req: options.req, callback: callback, whitelisted_domains: options.whitelisted_domains, type: options.type });
       }
     });
@@ -181,103 +181,3 @@ function securityFactory(options) {
 }
 
 module.exports = securityFactory;
-
-  /*  function( callback ){
-        validateApigeeAccountToken( { url: urljoin(config.security.apigee_accounts.url, req.query.uuid + '.json?access_token='), access_token: access_token, req: req, callback: callback, type: 'apigee_accounts_token' } );
-      },*/
-
-/*  function verifyJWT(options, callback) {
-    debug('publicKey', options.public_key);
-    debug('validating access token', options.access_token);
-    debug('validating access token length', options.access_token.length);
-    jwt.verify(options.access_token, options.public_key, { algorithms: ['RS256'] }, function (err, decoded) {
-      debug('verifyJWT response', err, decoded);
-      if (!err) {
-        utils.getUserAccounts({ access_token: options.access_token, email: decoded.email || decoded.cid, req: options.req, callback: callback, type: options.type });
-      } else {
-        debug('error triggered from verifyJWT');
-        callback(null, { valid: false, "message_back": err, type: options.type });
-      }
-    });
-  }*/
-
-/*
-  function validateSalesForceJWTToken(options, callback) {
-    cache.get('sso2SalesForceTokenKeys', function (error, sso2SalesForceTokenKeys) {
-      var decoded_jwt;
-      try {
-        decoded_jwt = jwt.decode(options.access_token, { complete: true });
-        debug('access token decoded3', decoded_jwt);
-
-        if (!sso2SalesForceTokenKeys) {
-          request({ url: options.token_key_url, rejectUnauthorized: false }, function (error, response, sso2SalesForceTokenKeys) {
-            if (!error) {
-              cache.put('sso2SalesForceTokenKeys', sso2SalesForceTokenKeys, 36000); //retrieve key every 10 hrs
-              debug('sso2SalesForceTokenKeys', sso2SalesForceTokenKeys);
-
-              var key = getKey(decoded_jwt.header.kid, JSON.parse(sso2SalesForceTokenKeys).keys);
-              debug('salesforce key', key);
-
-              verifyJWT({ access_token: options.access_token, req: options.req, res: options.res, public_key: jwkToPem(key), type: options.type }, callback);
-            } else {
-              callback(null, { valid: false, "message_back": "Error retrieving tokenKey" });
-            }
-          });
-        } else {
-          var key = getKey(decoded_jwt.header.kid, JSON.parse(sso2SalesForceTokenKeys).keys);
-          verifyJWT({ access_token: options.access_token, req: options.req, res: options.res, public_key: jwkToPem(key), type: options.type }, callback);
-        }
-      } catch (e) {
-        return callback(null, { valid: false, message_back: "Error decoding JWT", type: options.type });
-      }
-    });
-  }
-
-  function getKey(kid, keys) {
-    return keys.find(function (key) {
-      return key.kid === kid;
-    })
-  }
-
-*/
-
-/*  function validateApigeeAccountToken(options) {
-    var url = options.url + options.access_token; // 'https://www.googleapis.com/oauth2/v3/tokeninfo?access_token='
-    debug('validating token with url:', url);
-    request.get({ url: url, rejectUnauthorized: false }, function (error, response, body) {
-      debug('response after validating token:', error, JSON.stringify(body));
-      var _body = body ? JSON.parse(body) : {};
-
-      //_body.data.email = 'akshay.anand9@t-mobile.com';
-      if (!error && response.statusCode === 200) {
-        utils.getUserAccounts({ access_token: options.access_token, email: _body.data.email, req: options.req, callback: options.callback, type: options.type });
-      } else {
-        options.callback(null, { "valid": false, type: options.type });
-      }
-    });
-  }*/
-
-/*  function getUserAccounts(options) {
-    debug('running getUserAccounts');
-    var account_list = [];
-    options.email = options.email.toLowerCase();
-    if (endsWithAllAccess(options.email, config.security.email_domain)) {
-      account_list.push('*');
-      utils.callCallback({ access_token: options.access_token, email: options.email, req: options.req, account_list: account_list, callback: options.callback, type: options.type });
-    } else {
-      models.AccountUserMap.findAll({ where: { email: options.email }, attributes: ["email", "account_id", "roles"] })
-        .then(function (accountUserMaps) {
-          accountUserMaps.forEach(function (accountUserMap, idx) {
-            account_list.push(accountUserMap.dataValues.account_id);
-          });
-          utils.callCallback({ access_token: options.access_token, email: options.email, req: options.req, account_list: account_list, callback: options.callback, type: options.type });
-        });
-    }
-  }*/
-
-/*  function endsWithAllAccess(email, email_domains) {
-    debug('email, email_domains', email, email_domains);
-    return email_domains.some(function (domain) {
-      return _.endsWith(email, domain);
-    });
-  }*/
