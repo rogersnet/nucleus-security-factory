@@ -121,7 +121,8 @@ function securityFactory(options) {
           debug(err);
         }
         debug('checking options', options);
-        utils.getUserAccounts({ access_token: options.access_token, email: _body.email, req: options.req, callback: options.callback, whitelisted_domains: options.whitelisted_domains, type: options.type });
+        utils.getUserAccounts({ access_token: options.access_token, email: _body.email, req: options.req, callback: options.callback, whitelisted_domains: options.whitelisted_domains, type: options.type,
+         models: models});
       } else {
         options.callback(null, { "valid": false, type: options.type });
       }
